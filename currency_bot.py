@@ -29,7 +29,8 @@ import requests
 # ──────────────────────────────────────────
 #  НАСТРОЙКИ — замените на свои значения
 # ──────────────────────────────────────────
-BOT_TOKEN = "7980300625:AAH8ek6OJvvDHvPg1TmDXw0VtLLueQyV5F4"
+import os
+BOT_TOKEN = os.getenv("BOT_TOKEN", "7980300625:AAH8ek6OJvvDHvPg1TmDXw0VtLLueQyV5F4")
 
 # ──────────────────────────────────────────
 #  Состояния диалога
