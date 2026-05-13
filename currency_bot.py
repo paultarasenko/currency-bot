@@ -287,9 +287,7 @@ async def quick_convert(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 #  Запуск бота
 # ──────────────────────────────────────────
 def main() -> None:
-    from telegram.ext import PicklePersistence
-persistence = PicklePersistence(filepath="conversations")
-app = Application.builder().token(BOT_TOKEN).persistence(persistence).build()
+    app = Application.builder().token(BOT_TOKEN).build()
 
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("convert", convert_start)],
@@ -309,9 +307,9 @@ app = Application.builder().token(BOT_TOKEN).persistence(persistence).build()
     app.add_handler(CommandHandler("rates", rates_command))
     app.add_handler(conv_handler)
     app.add_handler(MessageHandler(
-    filters.TEXT & ~filters.COMMAND & filters.Regex(r'^\d'),
-    quick_convert
-))
+        filters.TEXT & ~filters.COMMAND & filters.Regex(r'^\d'),
+        quick_convert
+    ))
 
     logger.info("Бот запущен...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
