@@ -306,7 +306,10 @@ def main() -> None:
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("rates", rates_command))
     app.add_handler(conv_handler)
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, quick_convert))
+    app.add_handler(MessageHandler(
+    filters.TEXT & ~filters.COMMAND & filters.Regex(r'^\d'),
+    quick_convert
+))
 
     logger.info("Бот запущен...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
