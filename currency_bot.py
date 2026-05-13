@@ -291,6 +291,7 @@ def main() -> None:
 
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("convert", convert_start)],
+        allow_reentry=True,
         states={
             CHOOSE_FROM: [CallbackQueryHandler(choose_from, pattern=r"^from:")],
             CHOOSE_TO: [CallbackQueryHandler(choose_to, pattern=r"^to:")],
