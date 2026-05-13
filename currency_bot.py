@@ -8,8 +8,9 @@ Telegram Currency Converter Bot
     python currency_bot.py
 
 Получить токен бота: @BotFather в Telegram
-Курсы берутся с API Национального банка Республики Беларусь (бесплатно, без ключа):
-    https://www.nbrb.by/api/exrates
+
+Exchange rates are fetched from:
+https://open.er-api.com/
 """
 
 import logging
