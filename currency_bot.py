@@ -25,7 +25,7 @@ from telegram.ext import (
     filters,
     ConversationHandler,
 )
-import requests
+import aiohttp
 
 #  НАСТРОЙКИ — замените на свои значения
 
@@ -60,22 +60,21 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-"""Получает курсы через open.er-api.com (бесплатно, без ключа)."""
-
-def get_nbrb_rates() -> dict:
+async def get_nbrb_rates() -> dict:
+    """Получает курсы через open.er-api.com (бесплатно, без ключа)."""
     try:
-        resp = requests.get("https://open.er-api.com/v6/latest/USD", timeout=10)
-        data = resp.json()
-        rates = data.get("rates", {})
-        rates["USD"] = 1.0
-        return rates
+        async with aiohttp.ClientSession() as session:
+            async with session.get("https://open.er-api.com/v6/latest/USD", timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                data = await resp.json()
+                rates = data.get("rates", {})
+                rates["USD"] = 1.0
+                return rates
     except Exception as e:
         logger.error(f"Ошибка: {e}")
         return {}
 
-
-def get_exchange_rate(from_currency: str, to_currency: str) -> float | None:
-    rates = get_nbrb_rates()
+async def get_exchange_rate(from_currency: str, to_currency: str) -> float | None:
+    rates = await get_nbrb_rates()
     if not rates:
         return None
     from_usd = rates.get(from_currency.upper())
