@@ -287,7 +287,9 @@ async def quick_convert(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 #  Запуск бота
 # ──────────────────────────────────────────
 def main() -> None:
-    app = Application.builder().token(BOT_TOKEN).build()
+    from telegram.ext import PicklePersistence
+persistence = PicklePersistence(filepath="conversations")
+app = Application.builder().token(BOT_TOKEN).persistence(persistence).build()
 
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("convert", convert_start)],
