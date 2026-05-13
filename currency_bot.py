@@ -26,21 +26,18 @@ from telegram.ext import (
 )
 import requests
 
-# ──────────────────────────────────────────
 #  НАСТРОЙКИ — замените на свои значения
-# ──────────────────────────────────────────
+
 import os
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-# ──────────────────────────────────────────
 #  Состояния диалога
-# ──────────────────────────────────────────
+
 CHOOSE_FROM, CHOOSE_TO, ENTER_AMOUNT = range(3)
 
-# ──────────────────────────────────────────
 #  Валюты — приоритетный порядок кнопок
 #  Базовая валюта НБРБ — белорусский рубль (BYN)
-# ──────────────────────────────────────────
+
 POPULAR_CURRENCIES = [
     ("🇺🇸 USD", "USD"),
     ("🇪🇺 EUR", "EUR"),
@@ -69,12 +66,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
-# ──────────────────────────────────────────
 #  Получение курсов с API Нацбанка РБ
 #  Все курсы — за единицу иностранной валюты
 #  в белорусских рублях (BYN)
-# ──────────────────────────────────────────
+
 def get_nbrb_rates() -> dict:
     try:
         resp = requests.get("https://open.er-api.com/v6/latest/USD", timeout=10)
@@ -97,10 +92,8 @@ def get_exchange_rate(from_currency: str, to_currency: str) -> float | None:
         return to_usd / from_usd
     return None
 
-
-# ──────────────────────────────────────────
 #  Клавиатура выбора валюты
-# ──────────────────────────────────────────
+
 def currency_keyboard(callback_prefix: str) -> InlineKeyboardMarkup:
     keyboard = []
     row = []
@@ -114,10 +107,8 @@ def currency_keyboard(callback_prefix: str) -> InlineKeyboardMarkup:
     keyboard.append([InlineKeyboardButton("❌ Отмена", callback_data="cancel")])
     return InlineKeyboardMarkup(keyboard)
 
-
-# ──────────────────────────────────────────
 #  Обработчики команд
-# ──────────────────────────────────────────
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
         "👋 *Привет! Я бот-конвертер валют.*\n\n"
@@ -161,10 +152,8 @@ async def rates_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             lines.append(f"{label}: недоступно")
     await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
 
-
-# ──────────────────────────────────────────
 #  Конвертация через диалог /convert
-# ──────────────────────────────────────────
+
 async def convert_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text(
         "💱 *Конвертация валюты*\n\nВыберите исходную валюту:",
@@ -230,7 +219,6 @@ async def enter_amount(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     )
     return ConversationHandler.END
 
-
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     if query:
@@ -240,11 +228,9 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         await update.message.reply_text("❌ Конвертация отменена.")
     return ConversationHandler.END
 
-
-# ──────────────────────────────────────────
 #  Быстрая конвертация из текста
 #  Формат: "100 USD в RUB" или "100 USD RUB"
-# ──────────────────────────────────────────
+
 async def quick_convert(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text = update.message.text.upper().replace("В ", "").replace("TO ", "").replace("IN ", "")
     parts = text.split()
@@ -282,10 +268,8 @@ async def quick_convert(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         parse_mode="Markdown",
     )
 
-
-# ──────────────────────────────────────────
 #  Запуск бота
-# ──────────────────────────────────────────
+
 def main() -> None:
     app = Application.builder().token(BOT_TOKEN).build()
 
