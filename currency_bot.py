@@ -53,22 +53,13 @@ POPULAR_CURRENCIES = [
     ("🇦🇪 AED", "AED"),
 ]
 
-# Коды валют НБРБ (scale — масштаб, например RUB даётся за 100 единиц)
-NBRB_CURRENCY_IDS = {
-    "USD": 431, "EUR": 451, "RUB": 456, "PLN": 452,
-    "GBP": 429, "CNY": 462, "JPY": 508, "CHF": 426,
-    "UAH": 449, "KZT": 453, "AED": 508,
-}
-
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO,
 )
 logger = logging.getLogger(__name__)
 
-#  Получение курсов с API Нацбанка РБ
-#  Все курсы — за единицу иностранной валюты
-#  в белорусских рублях (BYN)
+"""Получает курсы через open.er-api.com (бесплатно, без ключа)."""
 
 def get_nbrb_rates() -> dict:
     try:
