@@ -1,122 +1,101 @@
+import logging
+from decimal import Decimal
+
 from telegram import Update
-from telegram.ext import ContextTypes, ConversationHandler
+from telegram.ext import ContextTypes
 
-from bot.keyboards import currency_keyboard
-from bot.services.rates import get_exchange_rate
+from bot import state, views
+from bot.handlers.common import all_currencies_screen, converter_screen, is_code, show
+from bot.parsing import parse, parse_callback_amount, validate_amount
+from bot.services.rates import get_snapshot
 
-CHOOSE_FROM, CHOOSE_TO, ENTER_AMOUNT = range(3)
+logger = logging.getLogger(__name__)
+
+_FAVORITE_TOASTS = {
+    "added": "⭐ Добавлено в избранное",
+    "removed": "Убрано из избранного",
+    "full": f"В избранном максимум {state.MAX_FAVORITES} пар. Уберите ненужную в разделе «⭐ Избранное».",
+}
 
 
-async def convert_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text(
-        "💱 *Конвертация валюты*\n\nВыберите исходную валюту:",
-        parse_mode="Markdown",
-        reply_markup=currency_keyboard("from"),
-    )
-    return CHOOSE_FROM
-
-
-async def choose_from(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def convert_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Все inline-действия экрана конвертера (cv:*)."""
     query = update.callback_query
-    await query.answer()
-    _, code = query.data.split(":")
-    context.user_data["from_currency"] = code
-    await query.edit_message_text(
-        f"✅ Из: *{code}*\n\nТеперь выберите целевую валюту:",
-        parse_mode="Markdown",
-        reply_markup=currency_keyboard("to"),
-    )
-    return CHOOSE_TO
+    ud = context.user_data
+    parts = query.data.split(":")[1:]
 
-
-async def choose_to(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    query = update.callback_query
-    await query.answer()
-    _, code = query.data.split(":")
-    context.user_data["to_currency"] = code
-    from_c = context.user_data["from_currency"]
-    await query.edit_message_text(
-        f"✅ Из: *{from_c}* → В: *{code}*\n\nВведите сумму:",
-        parse_mode="Markdown",
-    )
-    return ENTER_AMOUNT
-
-
-async def enter_amount(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    text = update.message.text.replace(",", ".").strip()
-    try:
-        amount = float(text)
-        if amount <= 0:
-            raise ValueError
-    except ValueError:
-        await update.message.reply_text(
-            "⚠️ Пожалуйста, введите корректное число (например: `150` или `3.50`)",
-            parse_mode="Markdown",
-        )
-        return ENTER_AMOUNT
-
-    from_c = context.user_data["from_currency"]
-    to_c = context.user_data["to_currency"]
-
-    await update.message.reply_text("⏳ Конвертирую...")
-    rate = await get_exchange_rate(from_c, to_c)
-
-    if rate is None:
-        await update.message.reply_text("❌ Не удалось получить курс. Попробуйте позже.")
-        return ConversationHandler.END
-
-    result = amount * rate
-    await update.message.reply_text(
-        f"💰 *Результат конвертации:*\n\n"
-        f"`{amount:,.2f} {from_c}` = `{result:,.2f} {to_c}`\n\n"
-        f"📈 Курс: 1 {from_c} = {rate:.4f} {to_c}\n\n"
-        f"Хотите ещё раз? /convert",
-        parse_mode="Markdown",
-    )
-    return ConversationHandler.END
-
-
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    query = update.callback_query
-    if query:
+    if parts == ["fav"]:
+        outcome = state.toggle_favorite(ud, state.get_pair(ud))
+        await query.answer(_FAVORITE_TOASTS[outcome], show_alert=outcome == "full")
+    else:
         await query.answer()
-        await query.edit_message_text("❌ Конвертация отменена.")
-    else:
-        await update.message.reply_text("❌ Конвертация отменена.")
-    return ConversationHandler.END
 
-
-async def quick_convert(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    text = update.message.text.upper().replace("В ", "").replace("TO ", "").replace("IN ", "")
-    parts = text.split()
-
-    if len(parts) >= 3:
-        try:
-            amount = float(parts[0].replace(",", "."))
-            from_c = parts[1]
-            to_c = parts[2]
-        except (ValueError, IndexError):
+    match parts:
+        case ["pick", role] if role in ("f", "t"):
+            screen = views.picker(ud, role)
+        case ["set", role, code] if role in ("f", "t") and is_code(code):
+            (state.set_from if role == "f" else state.set_to)(ud, code)
+            screen = await converter_screen(ud)
+        case ["swap"]:
+            state.swap(ud)
+            screen = await converter_screen(ud)
+        case ["amt", value]:
+            amount = parse_callback_amount(value)
+            if amount is None:
+                logger.warning("Некорректная сумма в callback_data: %r", query.data)
+                return
+            state.set_amount(ud, amount)
+            screen = await converter_screen(ud)
+        case ["pair", from_code, to_code] if is_code(from_code) and is_code(to_code) and from_code != to_code:
+            state.set_pair(ud, from_code, to_code)
+            screen = await converter_screen(ud)
+        case ["all"]:
+            screen = await all_currencies_screen(ud)
+        case ["fav"]:
+            screen = await converter_screen(ud)
+        case _:
+            logger.warning("Неизвестный callback_data: %r", query.data)
             return
-    elif len(parts) == 2:
-        from_c, to_c = parts[0], parts[1]
-        amount = 1.0
-    else:
+
+    await show(update, context, screen)
+
+
+async def text_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Свободный ввод: «100 usd в byn», «$50», «250» (в текущей паре)."""
+    message = update.message
+    ud = context.user_data
+
+    query = parse(message.text)
+    if query is None:
+        await message.reply_text(views.unknown_input())
         return
 
-    if not (2 <= len(from_c) <= 4 and 2 <= len(to_c) <= 4 and from_c.isalpha() and to_c.isalpha()):
+    amount = query.amount if query.amount is not None else Decimal(1)
+    error = validate_amount(amount)
+    if error:
+        await message.reply_text(views.invalid_amount(error))
         return
 
-    rate = await get_exchange_rate(from_c, to_c)
-    if rate is None:
-        await update.message.reply_text(
-            f"❌ Не удалось найти курс *{from_c}* → *{to_c}*.\nПроверьте правильность кодов валют.",
-            parse_mode="Markdown",
-        )
+    snapshot = await get_snapshot()
+    if snapshot is None:
+        await show(update, context, views.rates_unavailable("conv"))
         return
 
-    result = amount * rate
-    await update.message.reply_text(
-        f"💰 `{amount:,.2f} {from_c}` = `{result:,.2f} {to_c}`\n"
-        f"📈 Курс: 1 {from_c} = {rate:.4f} {to_c}",
-        parse_mode="Markdown",
-    )
+    for code in (query.from_code, query.to_code):
+        if code and not snapshot.has(code):
+            await message.reply_text(views.unknown_currency(code))
+            return
+
+    if query.from_code and query.to_code:
+        if query.from_code == query.to_code:
+            await message.reply_text(views.same_currency())
+            return
+        state.set_pair(ud, query.from_code, query.to_code)
+    elif query.from_code:
+        state.set_from(ud, query.from_code)
+
+    state.set_amount(ud, amount)
+    from_code, to_code = state.get_pair(ud)
+    state.add_history(ud, from_code, to_code, amount)
+
+    await show(update, context, views.converter(ud, snapshot))
